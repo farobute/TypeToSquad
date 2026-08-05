@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\TypeToSquad.Core\TypeToSquad.Core.csproj" />
@@ -27,7 +27,7 @@
 
     <AssemblyName>TypeToSquad</AssemblyName>
     <RootNamespace>TypeToSquad.Wpf</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Product>TypeToSquad</Product>
     <Description>Type-to-speech tray app for Windows</Description>
 
