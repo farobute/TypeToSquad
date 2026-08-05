@@ -1,0 +1,51 @@
+<Window x:Class="TypeToSquad.Wpf.Views.InputPopup"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TypeToSquad"
+        Width="450" Height="120"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        ShowActivated="True"
+        WindowStartupLocation="Manual"
+        FocusManager.FocusedElement="{Binding ElementName=MessageTextBox}">
+
+    <Border Background="#E61B1F26"
+            CornerRadius="10"
+            BorderBrush="#33455566"
+            BorderThickness="1">
+
+        <Grid Margin="12,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBox x:Name="MessageTextBox"
+                     Grid.Row="0"
+                     Background="Transparent"
+                     Foreground="White"
+                     BorderThickness="0"
+                     FontFamily="Segoe UI"
+                     FontSize="18"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     CaretBrush="White"
+                     SelectionBrush="#55667788"
+                     Padding="2"
+                     PreviewKeyDown="OnMessagePreviewKeyDown" />
+
+            <TextBlock x:Name="HintLabel"
+                       Grid.Row="1"
+                       Margin="0,4,0,0"
+                       Foreground="#8899AABB"
+                       FontSize="11"
+                       Text="Enter 朗读 · Shift+Enter 换行 · Esc 关闭"
+                       HorizontalAlignment="Right" />
+        </Grid>
+    </Border>
+</Window>
