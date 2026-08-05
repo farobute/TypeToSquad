@@ -58,6 +58,8 @@ public class HotkeyService : IDisposable {
 			char c = char.ToUpperInvariant(keyPart[0]);
 			if (c is >= 'A' and <= 'Z') {
 				keyCode = c;
+			} else if (c is >= '0' and <= '9') {
+				keyCode = c;
 			} else {
 				return null;
 			}
@@ -105,6 +107,12 @@ public class HotkeyService : IDisposable {
 		if (binding is not null) {
 			NativeMethods.UnregisterHotKey(hwndSource.Handle, (int)id);
 			binding = null;
+		}
+
+		// Empty = intentionally disabled (valid state)
+		if (string.IsNullOrWhiteSpace(hotkeyString)) {
+			logger.LogInformation("Hotkey {Id} disabled (empty).", id);
+			return true;
 		}
 
 		var parsed = ParseHotkey(hotkeyString);

@@ -1,6 +1,9 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 using TypeToSquad.Core.Domain;
 
@@ -54,8 +57,9 @@ public partial class SettingsWindow : Window {
 		ReplacementPassesSlider.Value = settings.MaxReplacementPasses;
 		MaxStreamsSlider.Value = settings.MaxConcurrentStreams;
 
-		// Hotkey info (read-only; edited in config.json)
-		HotkeyInfo.Text = $"呼出: {settings.SummonHotkey}    停止: {settings.StopHotkey}";
+		// Hotkeys
+		SummonHotkeyBox.Text = settings.SummonHotkey;
+		StopHotkeyBox.Text = settings.StopHotkey;
 
 		// Replacements
 		var replacements = new ObservableCollection<TextReplacement>(settings.TextReplacements);
@@ -85,6 +89,87 @@ public partial class SettingsWindow : Window {
 		workingSettings.MaxConcurrentStreams = (int)MaxStreamsSlider.Value;
 		workingSettings.HistorySlots = (int)HistorySlotsSlider.Value;
 		workingSettings.MaxReplacementPasses = (int)ReplacementPassesSlider.Value;
+		workingSettings.SummonHotkey = SummonHotkeyBox.Text.Trim();
+		workingSettings.StopHotkey = StopHotkeyBox.Text.Trim();
+	}
+
+	// === Hotkey capture ===
+	//
+	// The hotkey boxes are read-only TextBoxes. When focused, the next
+	// modifier+key combination pressed is recorded and displayed.
+	// Backspace/Delete clears (hotkey disabled), Esc restores the old value.
+
+	void OnHotkeyPreviewKeyDown(object sender, KeyEventArgs e) {
+
+		var box = (TextBox)sender;
+		e.Handled = true; // never type into the box
+
+		switch (e.Key) {
+
+			case Key.Escape:
+				// Restore the previous value
+				box.Text = ReferenceEquals(box, SummonHotkeyBox)
+					? workingSettings.SummonHotkey
+					: workingSettings.StopHotkey;
+				return;
+
+			case Key.Back:
+			case Key.Delete:
+				// Clear = disable this hotkey
+				box.Text = "";
+				return;
+
+			case Key.LeftCtrl:
+			case Key.RightCtrl:
+			case Key.LeftShift:
+			case Key.RightShift:
+			case Key.LeftAlt:
+			case Key.RightAlt:
+			case Key.LWin:
+			case Key.RWin:
+			case Key.System:
+				// Pure modifier presses are ignored — wait for the actual key
+				return;
+		}
+
+		string? keyName = KeyToHotkeyName(e.Key);
+		if (keyName is null) return;
+
+		var modifiers = Keyboard.Modifiers;
+
+		// Global hotkeys must include at least one modifier
+		if (modifiers == ModifierKeys.None) return;
+
+		box.Text = BuildHotkeyString(modifiers, keyName);
+	}
+
+	/// <summary>Maps a WPF Key to the config vocabulary (A-Z, 0-9, F1-F12, SPACE, ENTER, TAB).</summary>
+	static string? KeyToHotkeyName(Key key) {
+
+		if (key is >= Key.A and <= Key.Z) return key.ToString();
+		if (key is >= Key.D0 and <= Key.D9) return key.ToString()[1..]; // "D3" → "3"
+		if (key is >= Key.NumPad0 and <= Key.NumPad9) return ((int)key - (int)Key.NumPad0).ToString();
+		if (key is >= Key.F1 and <= Key.F12) return key.ToString();
+
+		return key switch {
+			Key.Space => "SPACE",
+			Key.Enter => "ENTER",
+			Key.Tab => "TAB",
+			_ => null,
+		};
+	}
+
+	static string BuildHotkeyString(ModifierKeys modifiers, string keyName) {
+
+		var parts = new List<string>();
+
+		if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("CTRL");
+		if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("ALT");
+		if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("SHIFT");
+		if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("WIN");
+
+		parts.Add(keyName);
+		return string.Join("+", parts);
 	}
 
 	// === Slider value labels ===

@@ -294,9 +294,16 @@ public partial class App : Application {
 		audioPlayer!.MaxConcurrentStreams = settings.MaxConcurrentStreams;
 		audioPlayer.CurrentDevice = settings.OutputDevice;
 
-		// Re-register hotkeys
-		hotkeys!.SetSummonHotkey(settings.SummonHotkey);
-		hotkeys.SetStopHotkey(settings.StopHotkey);
+		// Re-register hotkeys; surface conflicts (already used by another app)
+		bool summonOk = hotkeys!.SetSummonHotkey(settings.SummonHotkey);
+		bool stopOk = hotkeys.SetStopHotkey(settings.StopHotkey);
+
+		if (!summonOk || !stopOk) {
+			string failed = (!summonOk ? $"呼出 ({settings.SummonHotkey})" : "")
+				+ (!summonOk && !stopOk ? " 和 " : "")
+				+ (!stopOk ? $"停止 ({settings.StopHotkey})" : "");
+			tray?.ShowBalloonTip("TypeToSquad", $"快捷键注册失败（可能被其他程序占用）: {failed}", Forms.ToolTipIcon.Warning);
+		}
 	}
 
 	void UpdateTrayMenu() {

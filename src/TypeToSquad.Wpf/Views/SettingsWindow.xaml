@@ -91,8 +91,22 @@
                                 ValueChanged="OnReplacementPassesSliderChanged" />
                     </DockPanel>
 
-                    <TextBlock Text="全局快捷键 (在 config.json 中修改)" Style="{StaticResource FieldLabel}" />
-                    <TextBlock x:Name="HotkeyInfo" Foreground="#8899AABB" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <TextBlock Text="呼出输入框 (Summon)" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="SummonHotkeyBox" Height="30" Padding="6,3" Margin="0,0,0,14"
+                             IsReadOnly="True"
+                             Background="#FF232933" Foreground="White"
+                             BorderBrush="#33455566" CaretBrush="White"
+                             PreviewKeyDown="OnHotkeyPreviewKeyDown" />
+
+                    <TextBlock Text="停止朗读 (Stop)" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="StopHotkeyBox" Height="30" Padding="6,3" Margin="0,0,0,8"
+                             IsReadOnly="True"
+                             Background="#FF232933" Foreground="White"
+                             BorderBrush="#33455566" CaretBrush="White"
+                             PreviewKeyDown="OnHotkeyPreviewKeyDown" />
+
+                    <TextBlock Foreground="#8899AABB" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="点击输入框后按下新的组合键即可修改；Backspace/Delete 清除 = 禁用该热键；Esc 取消修改。输入框内的 Enter/Esc 为固定操作。" />
                 </StackPanel>
             </TabItem>
 
