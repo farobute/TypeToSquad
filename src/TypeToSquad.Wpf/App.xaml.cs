@@ -120,6 +120,14 @@ public partial class App : Application {
 
 			historyTracker = new HistoryTracker { HistorySlots = settings.HistorySlots };
 
+			// Register bundled offline voices before starting the daemon.
+			// WinRT SpeechSynthesizer scans the registry on first use, so
+			// voices must be registered before the daemon process starts.
+			int registeredVoices = Services.VoiceRegistrationService.RegisterBundledVoices(
+				loggerFactory.CreateLogger<Services.VoiceRegistrationService>());
+			if (registeredVoices > 0)
+				log.LogInformation("Registered {Count} bundled voice(s).", registeredVoices);
+
 			daemonClient = new DaemonClient(loggerFactory.CreateLogger<DaemonClient>());
 			synthesizer = new SpeechSynthesizerService(daemonClient, loggerFactory.CreateLogger<SpeechSynthesizerService>());
 			audioPlayer = new AudioPlaybackService(loggerFactory.CreateLogger<AudioPlaybackService>()) {

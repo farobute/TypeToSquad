@@ -51,6 +51,12 @@ public class DaemonClient : IDisposable {
 		return Path.Combine(projectRootPath, RelativeExecutablePath);
 	}
 
+	/// <summary>Gets the absolute directory containing the daemon.</summary>
+	public static string GetDaemonDirectory() {
+		string projectRootPath = Path.GetDirectoryName(Environment.ProcessPath) ?? "";
+		return Path.Combine(projectRootPath, "WinRTSpeechDaemon");
+	}
+
 	/// <summary>Starts (or restarts) the daemon process.</summary>
 	public void StartDaemon() {
 
