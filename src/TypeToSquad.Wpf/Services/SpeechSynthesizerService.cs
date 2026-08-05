@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Logging;
@@ -20,55 +21,65 @@ using TerminateRequest = WinRTSpeechSynthServer.Protocol.Messages.TerminateReque
 namespace TypeToSquad.Wpf.Services;
 
 /// <summary>
-/// Implements <see cref="ISpeechSynthesizer"/> over the daemon.
-/// Converts RenderNode trees into WAV audio and caches the voice list.
-///
-/// Note: AppX-installed offline neural voices (e.g. Xiaoxiao, Yunxi)
-/// from Windows Settings cannot be used from an unpackaged desktop app
-/// through WinRT SpeechSynthesizer — this is a platform limitation.
-/// The AppXVoiceDiscoveryService is kept for when we support MSIX
-/// packaging or Embedded Speech SDK.
+/// Dual-backend speech synthesizer:
+/// - WinRT daemon for standard system voices
+/// - <c>edge-tts</c> CLI (Python package) for AppX-installed neural voices
 /// </summary>
 public class SpeechSynthesizerService : ISpeechSynthesizer {
 
 	readonly DaemonClient daemon;
+	readonly EdgeTtsClient edgeTts;
 	readonly ILogger logger;
 
 	readonly Dictionary<string, VoiceInfo> voicesByKey = new();
 	bool voicesLoaded = false;
 
-	/// <summary>Event raised when the voice list has been fetched.</summary>
 	public event Action? VoicesLoaded;
 
-	public SpeechSynthesizerService(DaemonClient daemon, ILogger<SpeechSynthesizerService> logger) {
+	public SpeechSynthesizerService(
+		DaemonClient daemon, EdgeTtsClient edgeTts,
+		ILogger<SpeechSynthesizerService> logger
+	) {
 		this.daemon = daemon;
+		this.edgeTts = edgeTts;
 		this.logger = logger;
 	}
 
 	public static string VoiceToSelectionKey(VoiceInfo voice) =>
 		$"{voice.Name} ({voice.Language})";
 
-	/// <summary>Fetches the installed voice list from the daemon. Idempotent.</summary>
 	public async Task LoadVoicesAsync() {
 		if (voicesLoaded) return;
 
 		try {
-			var response = await daemon.DispatchRequestAsync(new GetVoicesRequest());
+			var response = await daemon.DispatchRequestAsync(
+				new GetVoicesRequest());
 
 			if (response is AllVoicesResponse voicesResponse) {
 				voicesByKey.Clear();
-				foreach (var voice in voicesResponse.Voices)
-					voicesByKey[VoiceToSelectionKey(voice)] = voice;
+				foreach (var v in voicesResponse.Voices)
+					voicesByKey[VoiceToSelectionKey(v)] = v;
+
+				var appxVoices = AppXVoiceDiscoveryService.Discover(logger);
+				var seenNames = new HashSet<string>(
+					voicesResponse.Voices.Select(v => v.Name),
+					StringComparer.OrdinalIgnoreCase);
+				int appxAdded = 0;
+				foreach (var v in appxVoices) {
+					if (seenNames.Add(v.Name)) {
+						voicesByKey[VoiceToSelectionKey(v)] = v;
+						appxAdded++;
+					}
+				}
 
 				voicesLoaded = true;
-				logger.LogInformation("Loaded {Count} voices. Default: {Default}.",
-					voicesResponse.Voices.Length, voicesResponse.DefaultVoice.Name);
+				logger.LogInformation(
+					"Loaded {Total} voices ({WinRT} system + {AppX} neural/Edge-TTS).",
+					voicesByKey.Count, voicesResponse.Voices.Length, appxAdded);
 				VoicesLoaded?.Invoke();
-			} else {
-				logger.LogError("Unexpected response type {Type} for GetVoices.", response.Type);
 			}
 		} catch (Exception ex) {
-			logger.LogError(ex, "Failed to load voices from daemon.");
+			logger.LogError(ex, "Failed to load voices.");
 		}
 	}
 
@@ -85,26 +96,37 @@ public class SpeechSynthesizerService : ISpeechSynthesizer {
 		RenderNode node, string defaultVoiceKey,
 		double pitch, double rate, int volumePercent
 	) {
-		string input;
-		bool isSsml;
+		VoiceInfo voice = GetVoiceByKey(defaultVoiceKey)
+			?? throw new InvalidOperationException(
+				$"No voice under key \"{defaultVoiceKey}\"");
 
-		if (node.Type == RenderNodeType.Text) {
-			input = node.Attributes.GetValueOrDefault(RenderNodeAttribute.TextContent, "");
-			isSsml = false;
-		} else if (node.Type == RenderNodeType.SsmlRoot) {
-			input = MessageProcessor.StringifyNodeRecursive(node);
-			isSsml = true;
-		} else {
-			throw new NotSupportedException(
-				$"Unsupported node type \"{node.Type}\" for direct synthesis.");
+		// Extract text
+		string text = node.Type == RenderNodeType.Text
+			? node.Attributes.GetValueOrDefault(
+				RenderNodeAttribute.TextContent, "")
+			: MessageProcessor.StringifyNodeRecursive(node);
+
+		// Route: AppX → Edge-TTS, standard → daemon
+		bool isAppxVoice = voice.Id?.StartsWith(
+			"appx:", StringComparison.OrdinalIgnoreCase) == true;
+
+		if (isAppxVoice) {
+			string lang = string.IsNullOrEmpty(voice.Language)
+				? "zh-CN" : voice.Language;
+			string shortName = EdgeTtsClient.GetEdgeVoiceShortName(voice);
+
+			logger.LogInformation(
+				"Edge-TTS: {Short} ({Chars} chars)", shortName, text.Length);
+
+			return await edgeTts.SynthesizeAsync(
+				text, shortName, pitch, rate, volumePercent, lang,
+				CancellationToken.None);
 		}
 
-		VoiceInfo voice = GetVoiceByKey(defaultVoiceKey)
-			?? throw new InvalidOperationException($"No voice under key \"{defaultVoiceKey}\"");
-
+		// Standard daemon path
 		var request = new SynthesizeRequest {
-			InputString = input,
-			IsSsml = isSsml,
+			InputString = text,
+			IsSsml = node.Type != RenderNodeType.Text,
 			VoiceName = voice.Name,
 			Pitch = pitch,
 			Rate = rate,
@@ -114,15 +136,13 @@ public class SpeechSynthesizerService : ISpeechSynthesizer {
 		var response = await daemon.DispatchRequestAsync(request);
 
 		if (response is SynthesisResultResponse synthResponse) {
-			if (!synthResponse.GivenVoiceExists) {
-				logger.LogWarning("Selected voice \"{Voice}\" does not exist or is unavailable.",
-					voice.Name);
-			}
+			if (!synthResponse.GivenVoiceExists)
+				logger.LogWarning("Voice \"{Voice}\" not found.", voice.Name);
 			return synthResponse.SynthesizedData;
 		}
 
 		throw new InvalidOperationException(
-			$"Unexpected response type {response.Type} for synthesize.");
+			$"Unexpected response type {response.Type}.");
 	}
 
 	public async Task<VoiceInfo[]> GetInstalledVoicesAsync() {
@@ -138,11 +158,7 @@ public class SpeechSynthesizerService : ISpeechSynthesizer {
 	public async Task ShutdownAsync() {
 		try {
 			await daemon.DispatchRequestAsync(new TerminateRequest());
-			logger.LogInformation("Daemon terminated gracefully.");
-		} catch (Exception ex) {
-			logger.LogError(ex, "Daemon did not terminate gracefully.");
-		} finally {
-			daemon.CloseAndDisposeDaemon();
-		}
+		} catch { /* best-effort */ }
+		daemon.CloseAndDisposeDaemon();
 	}
 }

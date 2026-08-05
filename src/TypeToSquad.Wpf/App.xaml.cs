@@ -28,6 +28,7 @@ public partial class App : Application {
 	ISettingsRepository? settingsRepository;
 	AppSettings? settings;
 	DaemonClient? daemonClient;
+	EdgeTtsClient? edgeTtsClient;
 	SpeechSynthesizerService? synthesizer;
 	AudioPlaybackService? audioPlayer;
 	PlaybackOrchestrator? orchestrator;
@@ -129,7 +130,8 @@ public partial class App : Application {
 				log.LogInformation("Registered {Count} bundled voice(s).", registeredVoices);
 
 			daemonClient = new DaemonClient(loggerFactory.CreateLogger<DaemonClient>());
-			synthesizer = new SpeechSynthesizerService(daemonClient, loggerFactory.CreateLogger<SpeechSynthesizerService>());
+			edgeTtsClient = new EdgeTtsClient(loggerFactory.CreateLogger<EdgeTtsClient>());
+			synthesizer = new SpeechSynthesizerService(daemonClient, edgeTtsClient, loggerFactory.CreateLogger<SpeechSynthesizerService>());
 			audioPlayer = new AudioPlaybackService(loggerFactory.CreateLogger<AudioPlaybackService>()) {
 				MaxConcurrentStreams = settings.MaxConcurrentStreams,
 			};
@@ -437,7 +439,8 @@ public partial class App : Application {
 				var log = logFactory.CreateLogger<App>();
 
 				using var daemon = new DaemonClient(logFactory.CreateLogger<DaemonClient>());
-				var synth = new SpeechSynthesizerService(daemon, logFactory.CreateLogger<SpeechSynthesizerService>());
+				var edgeTts = new EdgeTtsClient(logFactory.CreateLogger<EdgeTtsClient>());
+					var synth = new SpeechSynthesizerService(daemon, edgeTts, logFactory.CreateLogger<SpeechSynthesizerService>());
 				synth.StartDaemon();
 
 				await synth.LoadVoicesAsync();

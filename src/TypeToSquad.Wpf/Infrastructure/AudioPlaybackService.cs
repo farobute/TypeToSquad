@@ -121,7 +121,20 @@ public class AudioPlaybackService : IAudioPlayer, IDisposable {
 			return;
 		}
 
-		var stream = new WaveFileReader(new MemoryStream(wavData));
+		// Auto-detect audio format: WAV (RIFF header) or MP3 (0xFF 0xFB+)
+		WaveStream stream;
+		var ms = new MemoryStream(wavData);
+		if (wavData.Length >= 4
+			&& wavData[0] == 0x52 // 'R'
+			&& wavData[1] == 0x49 // 'I'
+			&& wavData[2] == 0x46 // 'F'
+			&& wavData[3] == 0x46 // 'F'
+		) {
+			stream = new WaveFileReader(ms);
+		} else {
+			// Assume MP3 (Edge-TTS output)
+			stream = new Mp3FileReader(ms);
+		}
 
 		WasapiOut? player = null;
 		MMDeviceEnumerator? enumerator = null;
